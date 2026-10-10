@@ -21,7 +21,15 @@
     font-size:clamp(2.6rem,11vw,4rem);font-weight:900;letter-spacing:.12em;
     text-align:center;margin:8px 0 6px;color:var(--text)
   }
-  .count{text-align:center;font-size:1.1rem;font-weight:600;color:var(--text);opacity:.7;margin-bottom:18px}
+  .count{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    font-size:1.1rem;font-weight:600;color:var(--text);margin-bottom:18px
+  }
+  .count span{opacity:.7}
+  .dot{width:10px;height:10px;border-radius:50%;background:#6b7280;transition:background .3s}
+  .dot.ok{background:#22c55e}
+  .dot.err{background:#ef4444}
+  .aviso{text-align:center;padding:30px 10px;font-size:1.15rem;font-weight:700;opacity:.6}
   ul{list-style:none}
   li{
     display:flex;align-items:center;gap:18px;
@@ -60,6 +68,24 @@
   }
   .btn-cancelar{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.25)!important}
   .btn-confirmar{background:var(--done);color:#0d1117}
+  .agregar{display:flex;flex-direction:column;gap:10px;margin-top:36px;padding-top:24px;border-top:1px solid var(--line)}
+  .agregar .campos{display:flex;gap:10px}
+  .agregar input{
+    flex:1;min-width:0;padding:15px 14px;border-radius:14px;
+    background:#161b22;border:2px solid rgba(255,255,255,.15);color:#fff;
+    font-family:inherit;font-size:1.1rem;font-weight:700;outline:none
+  }
+  .agregar input::placeholder{color:rgba(255,255,255,.4)}
+  .agregar input:focus{border-color:var(--done)}
+  .agregar button{
+    padding:15px;border-radius:14px;border:none;cursor:pointer;
+    background:#fff;color:#0d1117;font-family:inherit;font-size:1.1rem;font-weight:900;letter-spacing:.08em
+  }
+  li .nombre{flex:1}
+  .quitar{
+    flex:0 0 auto;width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;
+    background:transparent;color:rgba(255,255,255,.45);font-size:1.4rem;font-weight:900;font-family:inherit
+  }
   .reset{
     display:block;margin:28px auto 0;padding:14px 28px;border-radius:999px;
     background:transparent;color:var(--text);border:2px solid var(--line);
@@ -70,9 +96,16 @@
 <body>
 <div class="wrap">
   <h1>CHECK</h1>
-  <div class="count" id="count"></div>
-  <ul id="list"></ul>
+  <div class="count"><i class="dot" id="dot"></i><span id="count">–</span></div>
+  <ul id="list"><div class="aviso">Cargando…</div></ul>
   <button class="reset" id="reset">REINICIAR</button>
+  <form class="agregar" id="formAgregar" autocomplete="off">
+    <div class="campos">
+      <input id="inNombre" placeholder="Nombre" required>
+      <input id="inApellido" placeholder="Apellido" required>
+    </div>
+    <button type="submit">+ AGREGAR</button>
+  </form>
 </div>
 
 <div class="overlay" id="overlay">
@@ -87,51 +120,107 @@
 </div>
 
 <script>
-const PERSONAS = [
-  "Sebastián Bustos","Amaru Carrasco","Javiera Céspedes","Joaquín Depix",
-  "Alejandro Espinoza","Belén Espinoza","Consuelo Fuentes","Piero Galaz","Lise Gamuri","Jaime Hernández",
-  "Francisco Layseca","Uan Millán","Thomas Pfeiffer","Avril Quiriagua",
-  "Diego Reyes","Diego Reyes","Tomás Rojas","Andrés Rojo",
-  "Juan Romero","Luciano Yáñez"
-];
-const KEY = "check_list_estado";
-let estado = [];
-try { estado = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) { estado = []; }
-if (estado.length !== PERSONAS.length) estado = PERSONAS.map(() => false);
+// URL de la app web de Apps Script (Implementar → App web)
+const API = "https://script.google.com/macros/s/AKfycbwrY_ffJQ4GwGOvvbjmME8SSrBFoEwvDPdDpwp6m3TR3NAfXPFs8GRJBTfOX1WeblBk/exec";
+const REFRESCO_MS = 4000;
+
+let personas = [];      // { id, n, a, c (check), x (agregado a mano) }
+let pendientes = 0;     // envíos en curso (no pisar con la lectura periódica)
+let firma = "";
 
 const list = document.getElementById("list");
 const count = document.getElementById("count");
+const dot = document.getElementById("dot");
 const tick = '<svg viewBox="0 0 24 24" fill="none" stroke="#0d1117" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-function guardar(){ try { localStorage.setItem(KEY, JSON.stringify(estado)); } catch(e){} }
+function conexion(ok){ dot.className = "dot " + (ok ? "ok" : "err"); }
 
-function render(){
+function ordenadas(){
+  return [...personas].sort((p, q) =>
+    p.a.localeCompare(q.a, "es", { sensitivity: "base" }) ||
+    p.n.localeCompare(q.n, "es", { sensitivity: "base" })
+  );
+}
+
+function render(forzar){
+  const f = JSON.stringify(personas);
+  if (!forzar && f === firma) return;   // sin cambios: no redibujar
+  firma = f;
   list.innerHTML = "";
-  PERSONAS.forEach((nombre, i) => {
+  ordenadas().forEach(p => {
+    const nombre = p.n + " " + p.a;
     const li = document.createElement("li");
-    if (estado[i]) li.classList.add("done");
-    li.innerHTML = `<span class="circle">${tick}</span><span>${nombre}</span>`;
+    li.dataset.id = p.id;
+    if (p.c) li.classList.add("done");
+    li.innerHTML = `<span class="circle">${tick}</span><span class="nombre"></span>`;
+    li.querySelector(".nombre").textContent = nombre;
     li.addEventListener("click", () => {
-      if (!estado[i]) {
-        preguntar("¿Confirmar check?", nombre, () => {
-          estado[i] = true;
-          li.classList.add("done");
-          guardar(); actualizarConteo();
-        });
+      if (!p.c) {
+        preguntar("¿Confirmar check?", nombre, () => marcar(p.id, true));
       } else {
-        estado[i] = false;
-        li.classList.remove("done");
-        guardar(); actualizarConteo();
+        marcar(p.id, false);
       }
     });
+    if (p.x) {
+      const btn = document.createElement("button");
+      btn.className = "quitar"; btn.textContent = "✕"; btn.setAttribute("aria-label", "Quitar");
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        preguntar("¿Quitar del listado?", nombre, () => {
+          personas = personas.filter(x => x.id !== p.id);
+          render();
+          enviar({ action: "remove", id: p.id });
+        });
+      });
+      li.appendChild(btn);
+    }
     list.appendChild(li);
   });
-  actualizarConteo();
+  const n = personas.filter(p => p.c).length;
+  count.textContent = `${n.toLocaleString("es-CL")} / ${personas.length.toLocaleString("es-CL")}`;
 }
-function actualizarConteo(){
-  const n = estado.filter(Boolean).length;
-  count.textContent = `${n.toLocaleString("es-CL")} / ${PERSONAS.length.toLocaleString("es-CL")}`;
+
+function marcar(id, valor){
+  const p = personas.find(x => x.id === id);
+  if (!p) return;
+  p.c = valor;
+  render();
+  enviar({ action: "check", id, valor });
 }
+
+// ---- Comunicación con la planilla ----
+async function cargar(){
+  if (!API || pendientes > 0 || document.hidden) return;
+  try {
+    const r = await fetch(API + "?t=" + Date.now());
+    const j = await r.json();
+    if (j.ok && pendientes === 0) { personas = j.personas; render(); }
+    conexion(j.ok);
+  } catch(e) { conexion(false); }
+}
+
+async function enviar(payload){
+  if (!API) return;
+  pendientes++;
+  let j = null;
+  try {
+    const r = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
+    j = await r.json();
+    conexion(j.ok);
+  } catch(e) { conexion(false); }
+  pendientes--;
+  if (pendientes === 0) {
+    if (j && j.ok) { personas = j.personas; render(); }
+    else cargar();
+  }
+  return j;
+}
+
+// ---- Globo de confirmación ----
 const overlay = document.getElementById("overlay");
 let accionPendiente = null;
 function preguntar(texto, titulo, accion){
@@ -148,11 +237,45 @@ document.getElementById("btnCancelar").addEventListener("click", cerrar);
 overlay.addEventListener("click", e => { if (e.target === overlay) cerrar(); });
 
 document.getElementById("reset").addEventListener("click", () => {
-  preguntar("¿Desmarcar todos?", "REINICIAR", () => {
-    estado = PERSONAS.map(() => false); guardar(); render();
+  preguntar("¿Desmarcar todos? (para todos los usuarios)", "REINICIAR", () => {
+    personas.forEach(p => p.c = false);
+    render();
+    enviar({ action: "reset" });
   });
 });
-render();
+
+// ---- Agregar nombre a mano ----
+const capitalizar = s => s.trim().replace(/\s+/g, " ")
+  .split(" ").map(w => w.charAt(0).toLocaleUpperCase("es") + w.slice(1)).join(" ");
+
+function irA(nombreCompleto){
+  const li = [...list.children].find(li => li.querySelector && li.querySelector(".nombre")?.textContent === nombreCompleto);
+  if (li) li.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+document.getElementById("formAgregar").addEventListener("submit", async e => {
+  e.preventDefault();
+  const inN = document.getElementById("inNombre");
+  const inA = document.getElementById("inApellido");
+  const n = capitalizar(inN.value), a = capitalizar(inA.value);
+  if (!n || !a) return;
+  personas.push({ id: "tmp" + Date.now(), n, a, c: false, x: true });
+  render();
+  inN.value = ""; inA.value = ""; inN.blur(); inA.blur();
+  irA(n + " " + a);
+  await enviar({ action: "add", nombre: n, apellido: a });
+  irA(n + " " + a);
+});
+
+// ---- Arranque ----
+if (!API) {
+  list.innerHTML = '<div class="aviso">Falta conectar la planilla (URL de Apps Script).</div>';
+  conexion(false);
+} else {
+  cargar();
+  setInterval(cargar, REFRESCO_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) cargar(); });
+}
 </script>
 </body>
 </html>
