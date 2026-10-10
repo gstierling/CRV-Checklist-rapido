@@ -39,6 +39,27 @@
   li.done{color:var(--done);font-size:calc(clamp(1.35rem,5.6vw,1.75rem) * .75)}
   li.done .circle{background:var(--done);border-color:var(--done)}
   li.done .circle svg{opacity:1}
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+    opacity:0;pointer-events:none;transition:opacity .2s;z-index:10
+  }
+  .overlay.show{opacity:1;pointer-events:auto}
+  .globo{
+    width:100%;max-width:420px;background:#161b22;border:2px solid rgba(255,255,255,.12);
+    border-radius:24px;padding:28px 22px 22px;text-align:center;
+    transform:scale(.9);transition:transform .2s
+  }
+  .overlay.show .globo{transform:scale(1)}
+  .globo p{font-size:1.15rem;font-weight:600;opacity:.75;margin-bottom:6px}
+  .globo h2{font-size:clamp(1.5rem,6.5vw,1.9rem);font-weight:900;margin-bottom:24px;color:#fff}
+  .botones{display:flex;gap:12px}
+  .botones button{
+    flex:1;padding:16px 10px;border-radius:16px;border:none;cursor:pointer;
+    font-family:inherit;font-size:1.1rem;font-weight:900;letter-spacing:.06em
+  }
+  .btn-cancelar{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.25)!important}
+  .btn-confirmar{background:var(--done);color:#0d1117}
   .reset{
     display:block;margin:28px auto 0;padding:14px 28px;border-radius:999px;
     background:transparent;color:var(--text);border:2px solid var(--line);
@@ -52,6 +73,17 @@
   <div class="count" id="count"></div>
   <ul id="list"></ul>
   <button class="reset" id="reset">REINICIAR</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="globo">
+    <p id="globoTexto">¿Confirmar check?</p>
+    <h2 id="globoNombre"></h2>
+    <div class="botones">
+      <button class="btn-cancelar" id="btnCancelar">CANCELAR</button>
+      <button class="btn-confirmar" id="btnConfirmar">CONFIRMAR</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -80,9 +112,17 @@ function render(){
     if (estado[i]) li.classList.add("done");
     li.innerHTML = `<span class="circle">${tick}</span><span>${nombre}</span>`;
     li.addEventListener("click", () => {
-      estado[i] = !estado[i];
-      li.classList.toggle("done", estado[i]);
-      guardar(); actualizarConteo();
+      if (!estado[i]) {
+        preguntar("¿Confirmar check?", nombre, () => {
+          estado[i] = true;
+          li.classList.add("done");
+          guardar(); actualizarConteo();
+        });
+      } else {
+        estado[i] = false;
+        li.classList.remove("done");
+        guardar(); actualizarConteo();
+      }
     });
     list.appendChild(li);
   });
@@ -92,9 +132,25 @@ function actualizarConteo(){
   const n = estado.filter(Boolean).length;
   count.textContent = `${n.toLocaleString("es-CL")} / ${PERSONAS.length.toLocaleString("es-CL")}`;
 }
+const overlay = document.getElementById("overlay");
+let accionPendiente = null;
+function preguntar(texto, titulo, accion){
+  document.getElementById("globoTexto").textContent = texto;
+  document.getElementById("globoNombre").textContent = titulo;
+  accionPendiente = accion;
+  overlay.classList.add("show");
+}
+function cerrar(){ overlay.classList.remove("show"); accionPendiente = null; }
+document.getElementById("btnConfirmar").addEventListener("click", () => {
+  const a = accionPendiente; cerrar(); if (a) a();
+});
+document.getElementById("btnCancelar").addEventListener("click", cerrar);
+overlay.addEventListener("click", e => { if (e.target === overlay) cerrar(); });
+
 document.getElementById("reset").addEventListener("click", () => {
-  if (!confirm("¿Desmarcar todos?")) return;
-  estado = PERSONAS.map(() => false); guardar(); render();
+  preguntar("¿Desmarcar todos?", "REINICIAR", () => {
+    estado = PERSONAS.map(() => false); guardar(); render();
+  });
 });
 render();
 </script>
