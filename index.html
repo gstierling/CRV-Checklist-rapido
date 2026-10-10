@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CHECK</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1117;
+    --text:#ffffff;
+    --done:#f3e8a6;      /* amarillo pálido */
+    --line:rgba(255,255,255,.08);
+    --circle:rgba(255,255,255,.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;min-height:100%}
+  body{padding:max(20px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))}
+  .wrap{max-width:720px;margin:0 auto}
+  h1{
+    font-size:clamp(2.6rem,11vw,4rem);font-weight:900;letter-spacing:.12em;
+    text-align:center;margin:8px 0 6px;color:var(--text)
+  }
+  .count{text-align:center;font-size:1.1rem;font-weight:600;color:var(--text);opacity:.7;margin-bottom:18px}
+  ul{list-style:none}
+  li{
+    display:flex;align-items:center;gap:18px;
+    padding:16px 6px;border-bottom:1px solid var(--line);
+    cursor:pointer;user-select:none;
+    font-size:clamp(1.35rem,5.6vw,1.75rem);font-weight:700;color:var(--text);
+    transition:color .25s, font-size .25s;
+  }
+  .circle{
+    flex:0 0 auto;width:36px;height:36px;border-radius:50%;
+    border:3px solid var(--circle);display:grid;place-items:center;
+    transition:background .2s,border-color .2s;
+  }
+  .circle svg{width:20px;height:20px;opacity:0;transition:opacity .2s}
+  li.done{color:var(--done);font-size:calc(clamp(1.35rem,5.6vw,1.75rem) * .75)}
+  li.done .circle{background:var(--done);border-color:var(--done)}
+  li.done .circle svg{opacity:1}
+  .reset{
+    display:block;margin:28px auto 0;padding:14px 28px;border-radius:999px;
+    background:transparent;color:var(--text);border:2px solid var(--line);
+    font-family:inherit;font-size:1rem;font-weight:800;letter-spacing:.08em;cursor:pointer
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CHECK</h1>
+  <div class="count" id="count"></div>
+  <ul id="list"></ul>
+  <button class="reset" id="reset">REINICIAR</button>
+</div>
+
+<script>
+const PERSONAS = [
+  "Sebastián Bustos","Amaru Carrasco","Javiera Céspedes","Joaquín Depix",
+  "Alejandro Espinoza","Belén Espinoza","Consuelo Fuentes","Piero Galaz","Lise Gamuri","Jaime Hernández",
+  "Francisco Layseca","Uan Millán","Thomas Pfeiffer","Avril Quiriagua",
+  "Diego Reyes","Diego Reyes","Tomás Rojas","Andrés Rojo",
+  "Juan Romero","Luciano Yáñez"
+];
+const KEY = "check_list_estado";
+let estado = [];
+try { estado = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) { estado = []; }
+if (estado.length !== PERSONAS.length) estado = PERSONAS.map(() => false);
+
+const list = document.getElementById("list");
+const count = document.getElementById("count");
+const tick = '<svg viewBox="0 0 24 24" fill="none" stroke="#0d1117" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function guardar(){ try { localStorage.setItem(KEY, JSON.stringify(estado)); } catch(e){} }
+
+function render(){
+  list.innerHTML = "";
+  PERSONAS.forEach((nombre, i) => {
+    const li = document.createElement("li");
+    if (estado[i]) li.classList.add("done");
+    li.innerHTML = `<span class="circle">${tick}</span><span>${nombre}</span>`;
+    li.addEventListener("click", () => {
+      estado[i] = !estado[i];
+      li.classList.toggle("done", estado[i]);
+      guardar(); actualizarConteo();
+    });
+    list.appendChild(li);
+  });
+  actualizarConteo();
+}
+function actualizarConteo(){
+  const n = estado.filter(Boolean).length;
+  count.textContent = `${n.toLocaleString("es-CL")} / ${PERSONAS.length.toLocaleString("es-CL")}`;
+}
+document.getElementById("reset").addEventListener("click", () => {
+  if (!confirm("¿Desmarcar todos?")) return;
+  estado = PERSONAS.map(() => false); guardar(); render();
+});
+render();
+</script>
+</body>
+</html>
